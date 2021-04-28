@@ -132,7 +132,7 @@ class OrderBook:
     def cancel_order(self, order_id):
         order = self.all_orders[order_id]
         if not order:
-            raise "No order found for the given ID"
+            raise Exception("No order found for the given ID")
         order.cancel()
 
     """
