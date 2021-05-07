@@ -23,7 +23,7 @@ class Order:
     :param order_size: quantity to buy (if > 0) or sell (if < 0)
     :raises Exception: This will occur if you attempt to provide a price to a market order
     """
-    def __init__(self, id_generator, agent_id, price, order_type, order_size):
+    def __init__(self, id_generator, agent_id, price, order_type, order_size, order_fill_callback = lambda x: x):
         self.id = next(id_generator)
         self.price = price
         self.agent_id = agent_id
@@ -31,6 +31,7 @@ class Order:
         self.order_type = order_type
         self.order_state = 'ACTIVE'
         self.partial_execution_log = []
+        self.order_fill_callback = order_fill_callback
         if self.order_type == 'MARKET' and self.price:
             raise Exception("Unable to provide price with market order")
         if self.order_type == 'LIMIT' and not self.price:
@@ -55,9 +56,11 @@ class Order:
         self.partial_execution_log.append(PartialExecution(quantity, price))
         # Partially execute the order until we hit a minimum of 0 units requested left
         self.order_size = max(abs(self.order_size) - quantity, 0) * np.sign(self.order_size)
-        self.order_state = 'PARTIAL_EXECUTION'
-        if self.order_size == 0:
+        if self.order_size != 0:
+            self.order_state = 'PARTIAL_EXECUTION'
+        else:
             self.order_state = 'FILLED'
+        self.order_fill_callback(self)
         
     # Needed for proper storage in the heapq structure (there aren't keys provided, implying you need to overload < to allow ordering)
     def __lt__(self, other):
@@ -93,22 +96,12 @@ class OrderBook:
         
     """
     Adds an order to the matching order book (whether bid or ask). It implements the following logic:
-    1) It will throw an exception for market orders if the other side does not have any orders present (MARKET BUY will fail if no asks, for ex.)
-    2) It will only allow one order to be active per agent at any given time (regardless of bid or ask)
-    3) It will attempt to immediately fill the market or limit order. If the market order cannot be fully fulfilled, it will be partially executed and cancelled.
-    4) Limit orders will stay on the bid/ask order books until they can be fulfilled or cancelled.
+    1) It will attempt to immediately fill the market or limit order. If the market order cannot be fully fulfilled, it will be partially executed and cancelled.
+    2) Limit orders will stay on the bid/ask order books until they can be fulfilled or cancelled.
     
     :param order: an order (instance of Order)
     """  
     def add_order(self, order):
-        # For market orders, we need to reject the order if there aren't any orders available on the book to fill it
-        has_liquidity_available = self.has_active_asks() if order.buy_or_sell() == 'BUY' else self.has_active_bids()
-        
-        if order.order_type == 'MARKET' and not has_liquidity_available:
-            raise Exception("No available liquidity to fill market order")
-        # Each agent should only be able to have one active order at a time. If there are existing ones, cancel them
-        self.__attempt_kill_orders_for_agent(order.agent_id)
-        
         # Add it to the dict of agent orders for rapid indexing
         self.agent_orders[order.agent_id].append(order)
 
