@@ -1,131 +1,148 @@
+from market import Market
+from orderbook import Order
+
 '''
 A simple wrapper class for keeping the position lists (both closed and open) of a given trader
 '''
+
+
 class TraderPosition:
-    def __init__(self, size, price):
+    def __init__(self, size: int, price: float):
         self.size = size
         self.price = price
-        
+
     '''
     Returns the notional value of the position (the size * price)
     '''
-    def notional():
+
+    def notional(self) -> float:
         return self.size * self.price
 
+
 '''
-Helper class for LIFO or FIFO calculation of a trader's PNL.
+Helper class for FIFO calculation of a trader's PNL.
 It handles both maintaining a running tally of PnL as well as both unrealized and realized PNL calculations.
 '''
+
 class PnlCalculator:
-    def __init__(self, isFifo=True):
+    def __init__(self):
         self.open_trades = []
         self.closed_trades = []
-        # By default we should use FIFO accounting principles, but this can be changed if needed to LIFO
-        self.fifoIndex = -1 if isFifo else 0
-        self.r_pnl = 0
-        self.quantity = 0
-        self.average_price = 0
-
-    def pnl(self,d):
-        return (d['close_price']-d['open_price'])*d['pos']
 
     '''
-    Handles addition to running tally of realized and unrealized PNL.
-    :param pos_change (integer): the quantity (in units) added (or subtracted) to the trader's position
-    :param exec_price (float): the price the trader is executed at
+    Returns the realized (closed) PnL
     '''
-    def update_pnl(self, pos_change, exec_price):
-        
-        def handle_position_closing(self, pos_change, exec_price, last_open):
-            # We can add an entry to our closed trades representing the price we long/shorted at (open price) and the closing price (the price we passed in)
-            d = {'pos':-pos_change, 'open_price':last_open['price'], 'close_price':exec_price}
-            self.closed_trades += [d]
-            # Since the trade is closed, we can modify our realized PNL
-            self.r_pnl += self.pnl(d)
+    def realized_pnl(self) -> float:
+        return sum([t[0] * t[1] for t in self.closed_trades])
 
-        
-        # If the trader has no positions open, instantiate the new trades array
-        if not len(self.open_trades):
-            self.open_trades = [{'pos':pos_change, 'price':exec_price}]
-            return
-        # Fetch the last trade (-1 if FIFO index, 0 otherwise)
-        last_open = self.open_trades[self.fifoIndex]
-        # If the last trade total and this trade both share the same sign (e.g. the position net is short and we add to our short, or vice versa)
-        if last_open['pos']*pos_change>0:
-            # Add another entry to our open trades
-            self.open_trades += [{'pos':pos_change, 'price':exec_price}]
-            return
-        # If the size of our last open position is greater or equal to the current change we're adding
-        if abs(last_open['pos'])>=abs(pos_change):
-            handle_position_closing(self, pos_change, exec_price, last_open)
-            # Finally, let's modify the last open position size
-            last_open['pos'] += pos_change
-            if last_open['pos']==0:
-                # And if that position now has 0 units, remove it from the open trades
-                self.open_trades.pop(self.fifoIndex)
-            return
-        # Finally, if this trade is bigger than the last open position
-        handle_position_closing(self, pos_change, exec_price, last_open)
-        pos_change += last_open['pos']
-        self.open_trades.pop(self.fifoIndex)
-        self.update_pnl(pos_change, exec_price)
+    '''
+    Returns unrealized (open) PnL
+    :param current_asset_price: the current spot price
+    '''
+    def unrealized_pnl(self, current_asset_price) -> float:
+        return sum([t[0] * (current_asset_price - t[1]) for t in self.open_trades])
 
-    # This takes in the current asset spot price and our existing positions (as provided in the #fill method) and gives us the unrealized PnL
-    def update_unrealized_pnl(self, price):
-        u_pnl = 0
-        self.quantity = 0
-        self.average_price = 0
-        for r in self.open_trades:
-            u_pnl += r['pos']*(price-r['price'])
-            self.quantity += r['pos']
-            self.average_price += r['pos']*r['price']
-        if self.quantity!=0:
-            self.average_price /= self.quantity
-        return u_pnl
-    
+    def fill(self, n_pos, exec_price):
+        current_quantity = sum([t[0] for t in self.open_trades])
+        if not self.open_trades:
+            self.open_trades.append((n_pos, exec_price))
+            return
+        # Assuming the same sign of the new quantity to add
+        if n_pos * current_quantity > 0:
+            self.open_trades.append((n_pos, exec_price))
+            # Case 1: Receiving new fills that increase your position
+        # Assuming a different sign of the new quantity to add
+        elif n_pos * current_quantity < 0:
+            # Case 2: Receiving new fills that decrease your position
+            total_to_fill = 0
+            # Pluck first in first out positions according to cost basis until we cover
+            # the whole order
+            while abs(total_to_fill) <= abs(n_pos) and self.open_trades:
+                # Pop the first-in open position (front of the list)
+                size, cost = self.open_trades.pop(0)
+                # Calculate the remainder we need to fill from the position just added
+                # and the total we've filled so far
+                total_remaining_to_fill = (n_pos + total_to_fill) * -1
+                if abs(size) <= abs(total_remaining_to_fill):
+                    self.closed_trades.append((size, exec_price - cost))
+                else:
+                    self.open_trades = [(size - total_remaining_to_fill, cost)] + self.open_trades
+                    self.closed_trades.append((total_remaining_to_fill, exec_price - cost))
+                total_to_fill = total_to_fill + size
+
+            # Case 3: Reverse your position
+            if abs(total_to_fill) < abs(n_pos):
+                remaining_fill = n_pos + total_to_fill
+                self.open_trades.append((remaining_fill, exec_price))
+
+
 '''
 Base class for all Trader/Trader types, implementing basic trader functionality (add/close positions, PnL calculation, current_position size).
 Additionally all super-classes must implement the method tick(), which will be called on every "turn" of the market.
 '''
+
+
 class Trader:
-    def __init__(self, id_generator,  max_account_size, positions = []):
+    def __init__(self, id_generator, max_account_size: int, positions: list = []):
         self.positions = positions
         self.max_account_size = max_account_size
         self.agent_id = next(id_generator)
         self.pnl_calc = PnlCalculator()
+
+    '''
+    Default handling method for creating an order which will actually change a trader's active positions.
+    :param id_generator
     
+    '''
+
+    def create_order(self, id_generator, price: float, order_type: str, order_size: int) -> Order:
+        return Order(id_generator, self.agent_id, price, order_type, order_size, self.handle_order_fill)
+
+    '''
+    Default handling method for when an order is filled (partially). We should modify the trader's positions and cost basis.
+    '''
+
+    def handle_order_fill(self, order: Order):
+        if not order.partial_execution_log:
+            raise AssertionError("Should not trigger order fill handler without order fill!")
+        last_executed = order.partial_execution_log[-1]
+        self.add_units_at_price(last_executed.quantity, last_executed.at_price)
+
     '''
     Adds a given position to the trader
     '''
-    def add_units_at_price(self, size, price):
+
+    def add_units_at_price(self, size: int, price: float):
         self.positions.append(TraderPosition(size, price))
-        self.pnl_calc.update_pnl(price, size)
-    
+        self.pnl_calc.fill(size, price)
+
     '''
     Returns the realized PnL of the trader
     '''
-    def realized_pnl(self):
-        return self.pnl_calc.r_pnl
-    
+
+    def realized_pnl(self) -> float:
+        return self.pnl_calc.realized_pnl()
+
     '''
     Returns the unrealized PnL of the trader
     :param current_asset_price: the current spot price of the asset to calc unrealized PnL
     '''
-    def unrealized_pnl(self, current_asset_price):
-        return self.pnl_calc.update_unrealized_pnl(current_asset_price)
-    
+
+    def unrealized_pnl(self, current_asset_price: float) -> float:
+        return self.pnl_calc.unrealized_pnl(current_asset_price)
+
     '''
     Returns the total amount of units of the asset the trader currently has
     '''
-    def current_position(self):
+
+    def current_position(self) -> int:
         return sum([t.size for t in self.positions])
-    
+
     '''
     Implements the "turn" of the trader in the market sim.
     
     :param market: (instance of Market)
     '''
-    def tick(market):
-        raise NotImplementedError("All traders must implement the tick method!")
-    
 
+    def tick(self, market: Market):
+        raise NotImplementedError("All traders must implement the tick method!")
