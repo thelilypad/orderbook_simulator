@@ -1,11 +1,6 @@
 from market import ORDER_ID_GENERATOR, Market
-from orderbook import OrderBook
-
-'''
-A simple implementation of a "market maker" type trader, whose main prospectus is:
-1) If we own a current position (whether short or long), set a limit order to attempt to fill it/flatten
-2) If we don't, quote a two-sided spread for the maximum amount we're willing to buy/sell based on the current bid/ask
-'''
+from orderbook import OrderBook, Order
+from trader import Trader
 
 
 def __create_spread(order_book: OrderBook):
@@ -13,6 +8,13 @@ def __create_spread(order_book: OrderBook):
     bid = min(0.01, min(book_prices[0], book_prices[1] - 0.01))
     ask = min(0.02, min(book_prices[0] + 0.01, book_prices[1]))
     return bid, ask
+
+
+'''
+A simple implementation of a "market maker" type trader, whose main prospectus is:
+1) If we own a current position (whether short or long), set a limit order to attempt to fill it/flatten
+2) If we don't, quote a two-sided spread for the maximum amount we're willing to buy/sell based on the current bid/ask
+'''
 
 
 class MarketMakingTrader(Trader):

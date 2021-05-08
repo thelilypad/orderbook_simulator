@@ -1,7 +1,7 @@
 import numpy
 from orderbook import Order
 from trader import Trader
-from market import ORDER_ID_GENERATOR
+from market import ORDER_ID_GENERATOR, Market
 
 '''
 The basic implementation of the liquidating, random trader.
@@ -32,18 +32,18 @@ class LiquidatingRandomTrader(Trader):
         if market_order.order_state == 'CANCEL_PARTIAL_UNFILLED':
             self.should_continue_to_liquidate = True
 
-    def __random_buy_at_market(market):
+    def __random_buy_at_market(self, market: Market):
         order_size = numpy.random.choice([0, 10, 100, 1000], p=[0.9, 0.07, 0.02, 0.01])
         additional_size = min(order_size, (self.max_position_size - (self.current_position() + order_size)))
         if additional_size > 0:
             market_order = Order(ORDER_ID_GENERATOR, self.agent_id, None, "MARKET", additional_size)
         try:
             market.submit_order(self, market_order)
-        except Error:
+        except Exception:
             # Wait until some liquidity appears
             return
 
-    def tick(market):
+    def tick(self, market: Market):
         current_asset_price = market.get_current_spot()
         if self.unrealized_pnl(current_asset_price) < self.loss_threshold or self.should_continue_to_liquidate:
             self.__liquidate_position(market)
