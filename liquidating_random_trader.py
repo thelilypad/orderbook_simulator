@@ -1,5 +1,4 @@
 import numpy
-from orderbook import Order
 from trader import Trader
 from market import ORDER_ID_GENERATOR, Market
 
@@ -33,9 +32,6 @@ class LiquidatingRandomTrader(Trader):
 
     def __random_buy_at_market(self, market: Market):
         order_size = numpy.random.choice([0, 10, 100, 1000], p=[0.9, 0.07, 0.02, 0.01])
-        # cur_pos: -100
-        # max_size: -100
-        # order_size: -100
         additional_size = min(abs(order_size), self.max_account_size - self.current_position()) * numpy.sign(order_size)
         if additional_size > 0:
             market_order = self.create_order(ORDER_ID_GENERATOR, None, "MARKET", additional_size)
