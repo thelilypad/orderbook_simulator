@@ -1,3 +1,4 @@
+from __future__ import annotations
 from market import Market
 from orderbook import Order
 
@@ -136,6 +137,8 @@ class Trader:
     '''
 
     def current_position(self) -> int:
+        if not self.positions:
+            return 0
         return sum([t.size for t in self.positions])
 
     '''

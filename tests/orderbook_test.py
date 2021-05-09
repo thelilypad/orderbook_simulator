@@ -31,30 +31,30 @@ class TestOrder(unittest.TestCase):
     def test_cannot_add_price_to_market_order(self):
         with self.assertRaises(Exception) as context:
             Order(ID_GENERATOR, AGENT_ID, PRICE, "MARKET", -100)
-            self.assetEqual(context, "Unable to provide price with market order")
+            self.assertEqual(context, "Unable to provide price with market order")
 
     def test_must_add_price_to_limit_order(self):
         with self.assertRaises(Exception) as context:
             Order(ID_GENERATOR, AGENT_ID, None, "LIMIT", -100)
-            self.assetEqual(context, "Limit order requires a price to be input")
+            self.assertEqual(context, "Limit order requires a price to be input")
 
     def test_partial_execution(self):
         order = Order(ID_GENERATOR, AGENT_ID, PRICE, "LIMIT", -100)
         self.assertEqual(order.order_state, "ACTIVE")
         self.assertEqual(order.order_size, -100)
-        order.partial_execute(20, 4)
+        order.partial_execute(-20, 4)
         self.assertEqual(order.order_size, -80)
         self.assertEqual(order.order_state, "PARTIAL_EXECUTION")
-        self.assertEqual(order.partial_execution_log, [PartialExecution(20, 4)])
-        order.partial_execute(20, 4)
+        self.assertEqual(order.partial_execution_log, [PartialExecution(-20, 4)])
+        order.partial_execute(-20, 4)
         self.assertEqual(order.order_size, -60)
         self.assertEqual(order.order_state, "PARTIAL_EXECUTION")
-        self.assertEqual(order.partial_execution_log, [PartialExecution(20, 4), PartialExecution(20, 4)])
-        order.partial_execute(60, 4)
+        self.assertEqual(order.partial_execution_log, [PartialExecution(-20, 4), PartialExecution(-20, 4)])
+        order.partial_execute(-60, 4)
         self.assertEqual(order.order_size, 0)
         self.assertEqual(order.order_state, "FILLED")
         self.assertEqual(order.partial_execution_log,
-                         [PartialExecution(20, 4), PartialExecution(20, 4), PartialExecution(60, 4)])
+                         [PartialExecution(-20, 4), PartialExecution(-20, 4), PartialExecution(-60, 4)])
 
 
 class TestOrderBook(unittest.TestCase):
@@ -166,7 +166,7 @@ class TestOrderBook(unittest.TestCase):
         book.add_order(market_sell_order)
         self.assertEqual(book.bids, [])
         self.assertEqual(book.asks, [])
-        self.assertEqual(market_sell_order.partial_execution_log, [PartialExecution(100, 100)])
+        self.assertEqual(market_sell_order.partial_execution_log, [PartialExecution(-100, 100)])
         self.assertEqual(limit_buy_order.partial_execution_log, [PartialExecution(100, 100)])
         self.assertEqual(limit_buy_order.order_state, 'FILLED')
 
@@ -179,7 +179,7 @@ class TestOrderBook(unittest.TestCase):
         book.add_order(limit_sell_order)
         self.assertEqual(book.bids, [])
         self.assertEqual(book.asks, [])
-        self.assertEqual(limit_sell_order.partial_execution_log, [PartialExecution(100, 200)])
+        self.assertEqual(limit_sell_order.partial_execution_log, [PartialExecution(-100, 200)])
         self.assertEqual(limit_buy_order.partial_execution_log, [PartialExecution(100, 200)])
         self.assertEqual(limit_buy_order.order_state, 'FILLED')
 

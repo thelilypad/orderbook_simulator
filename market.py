@@ -1,19 +1,31 @@
 import random
-
-from orderbook import OrderBook, next_id
+from orderbook import OrderBook, next_id, Order
+from typing import Optional, List
 
 ORDER_ID_GENERATOR = next_id()
 AGENT_ID_GENERATOR = next_id()
 
 '''
-Simple private class method for gating in various traders who can have multiple quotes active on the book
+Simple method for gating in various traders who can have multiple quotes active on the book
 This is de facto required to support market makers, who will quote both sides of the spread
 :param trader: a trader (subclass of Trader)
 '''
 
 
-def can_trader_have_multiple_active_quotes(trader):
+def can_trader_have_multiple_active_quotes(trader: 'Trader'):
     return type(trader).__name__ in ['MarketMakingTrader']
+
+
+class SpotPrices:
+    def __init__(self, bid: Optional[float], ask: Optional[float], last_transacted_price: Optional[float]):
+        self.bid = bid
+        self.ask = ask
+        self.last_transacted_price = last_transacted_price
+
+    def best_spot_price(self) -> Optional[float]:
+        if self.ask:
+            return self.ask
+        return self.last_transacted_price
 
 
 '''
@@ -25,16 +37,24 @@ This is required to:
 
 
 class Market:
-    def __init__(self, traders = [], max_iterations=50000):
+    def __init__(self, traders=None, max_iterations=50000):
+        if traders is None:
+            traders = []
         self.traders = traders
         self.max_iterations = max_iterations
         self.orderbook = OrderBook()
 
-    def add_trader(self, trader):
+    def add_trader(self, trader: 'Trader'):
         self.traders.append(trader)
 
-    def remove_trader(self, trader):
+    def remove_trader(self, trader: 'Trader'):
         self.traders.remove(trader)
+
+    def get_current_spot(self) -> SpotPrices:
+        highest_bid = self.orderbook.bids[0].price if self.orderbook.bids else None
+        lowest_ask = self.orderbook.asks[0].price if self.orderbook.asks else None
+        last_price = self.orderbook.last_transacted_price
+        return SpotPrices(highest_bid, lowest_ask, last_price)
 
     '''
     Helper method to provide an initial state to the market/book
@@ -42,7 +62,7 @@ class Market:
     :param orders: a list of orders (instance of Order)
     '''
 
-    def construct_initial_state(self, orders):
+    def construct_initial_state(self, orders: List[Order]):
         for order in orders:
             self.orderbook.add_order(order)
 
@@ -54,7 +74,7 @@ class Market:
     :param order: an order (instance of Order)
     '''
 
-    def submit_order(self, trader, order):
+    def submit_order(self, trader: 'Trader', order: Order):
         # For market orders, we need to reject the order if there aren't any orders available on the book to fill it
         has_liquidity_available = self.orderbook.has_active_asks() if order.buy_or_sell() == 'BUY' else self.orderbook.has_active_bids()
 

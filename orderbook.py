@@ -8,7 +8,7 @@ import numpy as np
 
 
 def next_id():
-    i = 1;
+    i = 1
     while True:
         yield i
         i += 1
@@ -60,16 +60,18 @@ class Order:
     def partial_execute(self, quantity, price):
         self.partial_execution_log.append(PartialExecution(quantity, price))
         # Partially execute the order until we hit a minimum of 0 units requested left
-        self.order_size = max(abs(self.order_size) - quantity, 0) * np.sign(self.order_size)
+        self.order_size = max(abs(self.order_size - quantity), 0) * np.sign(self.order_size)
         if self.order_size != 0:
             self.order_state = 'PARTIAL_EXECUTION'
         else:
             self.order_state = 'FILLED'
         self.order_fill_callback(self)
 
-    # Needed for proper storage in the heapq structure (there aren't keys provided, implying you need to overload < to allow ordering)
+    # Needed for proper storage in the heapq structure (there aren't keys provided, implying you need to overload <
+    # to allow ordering)
     def __lt__(self, other):
-        # Since heapq implements a minheap, we need to incorrectly overload SELL LIMIT orders to put the top item first (the lowest ask)
+        # Since heapq implements a minheap, we need to incorrectly overload SELL LIMIT orders to put the top item
+        # first (the lowest ask)
         if self.order_size > 0:
             return self.price > other.price
         return self.price < other.price
@@ -85,9 +87,9 @@ class PartialExecution:
 
 
 class OrderBook:
-    '''
+    """
     Class implementing the basic order book, including partial execution of orders, limit, and market orders.
-    '''
+    """
 
     def __init__(self):
         self.asks = []
@@ -95,6 +97,7 @@ class OrderBook:
         self.agent_orders = defaultdict(list)
         self.all_orders = {}
         self.log = []
+        self.last_transacted_price = None
         heapq.heapify(self.asks)
         heapq.heapify(self.bids)
 
@@ -119,7 +122,8 @@ class OrderBook:
         # Otherwise, add it to the book based on the price
         if not has_immediately_filled:
             if order.buy_or_sell() == 'BUY':
-                # Due to the minheap implementation, we have to multiply price by -1 to store it in order (highest bid first)
+                # Due to the minheap implementation, we have to multiply price by -1 to store it in order (highest
+                # bid first)
                 heapq.heappush(self.bids, order)
             else:
                 heapq.heappush(self.asks, order)
@@ -206,14 +210,22 @@ class OrderBook:
             heapq.heappop(heap)
             return
 
-        txn.partial_execute(order_size, txn.price)
+        # The amount we fill is the minimum of the order in the book and the amount we
+        # are trying to match in the current order
+        fill_order_size = min(txn_size, order_size)
+        txn.partial_execute(fill_order_size * np.sign(txn.order_size), txn.price)
         # If the available order is smaller or equal to our current order, pop it from the book and mark it filled
         if txn_size <= order_size:
             txn = heapq.heappop(heap)
             txn.fill()
 
         # Mark the price and quantity we filled the order partially at
-        order.partial_execute(txn_size, txn.price)
+        order.partial_execute(fill_order_size * np.sign(order.order_size), txn.price)
+
+        # Set the last transacted price to equal the current transaction price
+        # This is useful if the orderbook dries up and we need a reference
+        # For the next price (e.g. 0 asks on the book, some bids)
+        self.last_transacted_price = txn.price
 
     """
     Private class method for handling fills when an order comes in (both market and limit).
@@ -242,17 +254,18 @@ class OrderBook:
             while abs(order.order_size) > 0 and len(bid_or_ask):
                 self.__attempt_order_match(order, bid_or_ask)
             if abs(order.order_size) > 0:
-                # If the order still has remaining volume to fill and there are no more bid/asks for a market order, mark it a completed state
-                # On the converse, limit orders can stay as-is
+                # If the order still has remaining volume to fill and there are no more bid/asks for a market order,
+                # mark it a completed state On the converse, limit orders can stay as-is
                 order.cancel_partial_unfilled()
             # Always return true for a market order - either it will fill or it won't
             return True
 
         # If the order type is LIMIT
         else:
-            # If it is a buy, try to fill it at the price provided or a lower price
-            # This is implied by the ordering of the book - we check the top of the book (the lowest ask) and either it is lower/equal
-            # To our order price (in which case we can fill it according to the same MARKET order logic) or it is higher (in which case we have no fill)
+            # If it is a buy, try to fill it at the price provided or a lower price This is implied by the ordering
+            # of the book - we check the top of the book (the lowest ask) and either it is lower/equal To our order
+            # price (in which case we can fill it according to the same MARKET order logic) or it is higher (in which
+            # case we have no fill)
             if order.buy_or_sell() == 'BUY':
                 while len(bid_or_ask) and bid_or_ask[0].price <= order.price and abs(
                         order.order_size) > 0 and self.has_active_asks():

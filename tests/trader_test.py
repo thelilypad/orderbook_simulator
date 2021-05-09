@@ -12,6 +12,7 @@ class TestTraderPosition(unittest.TestCase):
         pos = TraderPosition(50, 50.3)
         self.assertEqual(pos.notional(), 50 * 50.3)
 
+
 class TestPnlCalculator(unittest.TestCase):
     def test_random_stack_overflow_case(self):
         # Sanity check case from:
@@ -78,8 +79,10 @@ class TestPnlCalculator(unittest.TestCase):
         self.assertEqual(calc.unrealized_pnl(50), 0)
         self.assertEqual(calc.realized_pnl(), -1050)
 
+
 TRADER_ID = next_id()
 ORDER_ID = next_id()
+
 
 class TestTrader(unittest.TestCase):
     def test_create_order_correctly(self):
@@ -92,13 +95,12 @@ class TestTrader(unittest.TestCase):
         self.assertRaises(AssertionError, order.order_fill_callback, order)
 
     def test_order_fill_handler(self):
-        trader = Trader(TRADER_ID, 400)
-        order = trader.create_order(ORDER_ID, 100, 'LIMIT', 100)
-        self.assertRaises(AssertionError, trader.handle_order_fill, order)
-        order.partial_execute(40, 100)
-        trader.handle_order_fill(order)
-        self.assertEqual(trader.positions[0].__dict__, {'price': 100, 'size': 40})
-
+        trader1 = Trader(TRADER_ID, 400)
+        order1 = trader1.create_order(ORDER_ID, 100, 'LIMIT', 100)
+        self.assertRaises(AssertionError, trader1.handle_order_fill, order1)
+        order1.partial_execute(40, 100)
+        trader1.handle_order_fill(order1)
+        self.assertEqual(trader1.positions[0].__dict__, {'price': 100, 'size': 40})
 
     def test_add_units_and_update_pnl(self):
         trader = Trader(TRADER_ID, 400)
@@ -106,4 +108,3 @@ class TestTrader(unittest.TestCase):
         self.assertEqual(trader.positions[0].__dict__, {'price': 50, 'size': 40})
         trader.add_units_at_price(-40, 60)
         self.assertEqual(trader.realized_pnl(), 400)
-

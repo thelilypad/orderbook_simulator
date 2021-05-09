@@ -3,10 +3,17 @@ from orderbook import OrderBook, Order
 from trader import Trader
 
 
-def __create_spread(order_book: OrderBook):
-    book_prices = list(map(lambda x: x[0].price if len(x) else 1000000000, [order_book.bids, order_book.asks]))
-    bid = min(0.01, min(book_prices[0], book_prices[1] - 0.01))
-    ask = min(0.02, min(book_prices[0] + 0.01, book_prices[1]))
+def create_spread(order_book: OrderBook):
+    # Grab the lowest ask and highest bid if they exist
+    # If they don't, set the price for each to 0
+    book_prices = list(map(lambda x: x[0].price if len(x) else 0, [order_book.bids, order_book.asks]))
+    bid_price, ask_price = book_prices
+    # Let the spread bid be the max of 0.01 (minimum possible bid price)
+    # and the max of current bid price or ask price minus 0.01 (min spread size)
+    bid = max(0.01, max(bid_price, ask_price - 0.01))
+    # Let the spread ask be the max of 0.02 (min bid + 0.01)
+    # and the max of current bid price and ask_price
+    ask = max(0.02, max(bid_price + 0.01, ask_price))
     return bid, ask
 
 
@@ -19,9 +26,9 @@ A simple implementation of a "market maker" type trader, whose main prospectus i
 
 class MarketMakingTrader(Trader):
     def __init__(self, id_generator, max_account_size, positions=None):
-        super().__init__(id_generator, max_account_size, positions)
         if positions is None:
             positions = []
+        super().__init__(id_generator, max_account_size, positions)
         self.orders = []
 
     '''
@@ -41,7 +48,7 @@ class MarketMakingTrader(Trader):
 
     def tick(self, market: Market):
         self.__kill_active_orders()
-        (bid, ask) = __create_spread(order_book)
+        (bid, ask) = create_spread(market.orderbook)
         # If we have net inventory
         if abs(self.current_position()) > 0:
             price_to_list = ask if self.current_position() > 0 else bid
@@ -53,4 +60,6 @@ class MarketMakingTrader(Trader):
             sell_limit_order = Order(ORDER_ID_GENERATOR, self.agent_id, ask, "LIMIT", -1 * self.max_account_size)
             buy_limit_order = Order(ORDER_ID_GENERATOR, self.agent_id, bid, "LIMIT", 1 * self.max_account_size)
             self.orders.append(sell_limit_order)
-            self.orders_append(buy_limit_order)
+            self.orders.append(buy_limit_order)
+            market.submit_order(self, sell_limit_order)
+            market.submit_order(self, buy_limit_order)
