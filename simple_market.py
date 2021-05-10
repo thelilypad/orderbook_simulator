@@ -1,5 +1,6 @@
 import numpy as np
 
+from liquidating_random_trader import LiquidatingRandomTrader
 from market import Market, SpotPrices
 from orderbook import next_id, Order
 from trader import Trader
@@ -20,7 +21,11 @@ In this case, instead of tracking order flow, we do the following:
 
 
 class SimpleMarket(Market):
-    def __init__(self, starting_spot_price: float, base_volume_per_price_level=1000, traders=[]):
+    def __init__(self, starting_spot_price: float, base_volume_per_price_level=1000, traders=None,
+                 max_iterations=50000):
+        if traders is None:
+            traders = []
+        super().__init__(traders, max_iterations)
         self.spot_price = starting_spot_price
         self.current_volume_left_at_price = base_volume_per_price_level
         self.base_volume_per_price_level = base_volume_per_price_level
@@ -29,6 +34,7 @@ class SimpleMarket(Market):
     '''
     Simple method (can override) for changing the spot price. This should uniformly choose to modify spot by 1, -1, or 0.
     '''
+
     def randomly_modify_spot_price(self):
         new_spot = self.spot_price + random.randint(-1, 1)
         if new_spot != self.spot_price:
@@ -70,12 +76,22 @@ class SimpleMarket(Market):
     '''
     Simple override to just return the spot price here.
     '''
+
     def get_current_spot(self) -> SpotPrices:
         return SpotPrices(self.spot_price, self.spot_price, self.spot_price)
+
     '''
     Overrides the base run_iteration functionality to randomly shift the spot price by +- $1 per iteration.
     If the spot price changes, we should reset the volume available for the iteration.
     '''
+
     def run_iteration(self, iteration: int):
         self.randomly_modify_spot_price()
         super().run_iteration(iteration)
+
+
+if __name__ == "__main__":
+    traders = [LiquidatingRandomTrader(TRADER_ID, 300, -10000) for i in range(200)]
+    market = SimpleMarket(300, 1000, traders, 500)
+    market.run()
+    print(list(map(lambda x: str(x.open) + " " + str(x.close) + '\n', market.ohlcs)))
