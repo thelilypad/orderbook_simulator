@@ -25,8 +25,20 @@ class SpotPrices:
     def best_spot_price(self) -> Optional[float]:
         if self.ask:
             return self.ask
-        return self.last_transacted_price
+        if self.last_transacted_price:
+            return self.last_transacted_price
+        return 0
 
+'''
+Simple helper class for storing open, high, low, close price data per market turn.
+'''
+
+class OHLC:
+    def __init__(self, p_open, high, low, close):
+        self.open = p_open
+        self.high = high
+        self.low = low
+        self.close = close
 
 '''
 Implementation of the Market class, which provides an abstraction of the marketplace (versus the orderbook which ostensibly handles orders)
@@ -43,6 +55,7 @@ class Market:
         self.traders = traders
         self.max_iterations = max_iterations
         self.orderbook = OrderBook()
+        self.ohlcs = []
 
     def add_trader(self, trader: 'Trader'):
         self.traders.append(trader)
@@ -56,6 +69,8 @@ class Market:
         last_price = self.orderbook.last_transacted_price
         return SpotPrices(highest_bid, lowest_ask, last_price)
 
+    def get_historical_ohlcs(self) -> List[OHLC]:
+        return self.ohlcs
     '''
     Helper method to provide an initial state to the market/book
     This is probably required to set an initial 'price' for the asset
@@ -89,6 +104,24 @@ class Market:
         # Finally submit the order to the book
         self.orderbook.add_order(order)
 
+    def run_iteration(self, iteration: int):
+        # Capture the spot price for every trader iteration this turn
+        spots = [self.get_current_spot().best_spot_price()]
+        # We should randomize the order of traders per turn to simulate reality better
+        randomized_trader_order = self.traders
+        random.shuffle(randomized_trader_order)
+        # For each trader in the market, call tick each turn in a random order
+        for trader in randomized_trader_order:
+            trader.tick(self)
+            # Store the spot price after every trader trades
+            spots.append(self.get_current_spot().best_spot_price())
+        # From that, we can calc this turn's OHLC
+        open_price = spots[0]
+        high_price = max(spots)
+        low_price = min(spots)
+        close_price = spots[-1]
+        self.ohlcs.append(OHLC(open_price, high_price, low_price, close_price))
+
     '''
     This is the "clock" of our simulator, allowing us to segment market interactions into "turns"
     On each turn, we shuffle the order of traders executing a decision (to simulate fairly random movement)
@@ -96,7 +129,4 @@ class Market:
 
     def run(self):
         for tick in range(self.max_iterations):
-            randomized_trader_order = self.traders
-            random.shuffle(randomized_trader_order)
-            for trader in randomized_trader_order:
-                trader.tick(self.orderbook)
+            self.run_iteration(tick)

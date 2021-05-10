@@ -1,0 +1,66 @@
+import numpy as np
+
+from market import Market, SpotPrices
+from orderbook import next_id, Order
+from trader import Trader
+import random
+
+TRADER_ID = next_id()
+
+'''
+Simple implementation of the market for testing basic behaviors that don't require N-body simulations
+(e.g. spot price and market depth are abstracted).
+'''
+
+
+class SimpleMarket(Market):
+    def __init__(self, starting_spot_price: float, base_volume_per_price_level=1000, traders=[]):
+        self.spot_price = starting_spot_price
+        self.current_volume_left_at_price = base_volume_per_price_level
+        self.base_volume_per_price_level = base_volume_per_price_level
+        self.traders = traders
+
+    def submit_order(self, trader: Trader, order: Order):
+        # This is a much more simplistic market that effectively has a set market depth per price point
+        # In this case, we should effectively fill every order instantly (this doesn't really handle LIMIT
+        # orders)
+        # We should 'add' volume when a sell occurs at a given price level and 'subtract' volume if the order is a buy
+        new_volume_at_strike = self.current_volume_left_at_price - order.order_size
+        # We should bump the spread based on the differential of volume added
+        # E.g. if a trader liquidates 2000 shares and our current level has 200 shares remaining
+        # We should drop the price $2 and set the new volume at price level for that price to 200 shares
+        spread_jumps = int(new_volume_at_strike / self.base_volume_per_price_level)
+        # We should at the current level fill the min(order_size, current_volume_left) if it's a BUY
+        # or the max of (current_volume_left - base_volume, order_size) if it's a SELL
+        fill_at_current_level = min(order.order_size, self.current_volume_left_at_price) if order.order_size > 0 \
+            else max(self.current_volume_left_at_price - self.base_volume_per_price_level, order.order_size)
+        # We should partially execute it at the given spot without moving the price
+        order.partial_execute(fill_at_current_level, self.spot_price)
+        # For each completely filled order level
+        for i in range(1, abs(spread_jumps)):
+            # We should modify the spot price accordingly for that filled level and execute it (-1 if a sell,
+            # +1 if a buy)
+            self.spot_price += i * np.sign(order.order_size)
+            order.partial_execute(self.base_volume_per_price_level, self.spot_price)
+        # Finally, we should have left over some order to fill that hasn't completely cleaned out a price level
+        order_left_to_fill = new_volume_at_strike % self.base_volume_per_price_level
+        if order_left_to_fill != 0:
+            # We should modify the spot level one more time
+            self.spot_price += np.sign(order.order_size)
+        # And execute the order
+        order.partial_execute(order_left_to_fill, self.spot_price)
+        cap = 0 if order.order_size < 0 else 1000
+        self.base_volume_per_price_level = cap - order_left_to_fill
+
+    def get_current_spot(self) -> SpotPrices:
+        return SpotPrices(self.spot_price, self.spot_price, self.spot_price)
+    '''
+    Overrides the base run_iteration functionality to randomly shift the spot price by +- $1 per iteration.
+    If the spot price changes, we should reset the volume available for the iteration.
+    '''
+    def run_iteration(self, iteration: int):
+        new_spot = self.spot_price + random.randint(-1, 1)
+        if new_spot != self.spot_price:
+            self.current_volume_left_at_price = self.base_volume_per_price_level
+        self.spot_price = new_spot
+        super().run_iteration(iteration)

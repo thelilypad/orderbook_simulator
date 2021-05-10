@@ -1,6 +1,9 @@
 import unittest
 import sys, os
 
+from liquidating_random_trader import LiquidatingRandomTrader
+from market_making_trader import MarketMakingTrader
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from orderbook import next_id
 from market import Market
@@ -47,7 +50,18 @@ class TestMarket(unittest.TestCase):
         self.assertEqual(order.order_state, "CANCELLED")
 
     def test_submit_order_market_maker(self):
-        pass
+        market_maker = MarketMakingTrader(TRADER_ID, 400)
+        market = Market([market_maker])
+        order = market_maker.create_order(ORDER_ID, 200, "LIMIT", 100)
+        order_two = market_maker.create_order(ORDER_ID, 202, "LIMIT", -100)
+        market.submit_order(market_maker, order)
+        market.submit_order(market_maker, order_two)
+        self.assertEqual(order.order_state, "ACTIVE")
+        self.assertEqual(order.order_state, "ACTIVE")
 
     def test_shuffle_and_call_tick_on_run(self):
-        pass
+        trader1 = MarketMakingTrader(TRADER_ID, 400)
+        trader2 = LiquidatingRandomTrader(TRADER_ID, 400, -400)
+        market = Market([trader1, trader2], max_iterations=10)
+        market.run()
+        self.assertEqual(len(market.ohlcs), 10)
