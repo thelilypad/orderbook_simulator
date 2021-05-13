@@ -56,7 +56,7 @@ class SimpleMarket(Market):
         # We should bump the spread based on the differential of volume added
         # E.g. if a trader liquidates 2000 shares and our current level has 200 shares remaining
         # We should drop the price $2 and set the new volume at price level for that price to 200 shares
-        spread_jumps = int(divide_hack(new_volume_at_strike / self.base_volume_per_price_level))
+        spread_jumps = int(divide_hack(new_volume_at_strike, self.base_volume_per_price_level))
         # We should at the current level fill the min(order_size, current_volume_left) if it's a BUY
         # or the max of (current_volume_left - base_volume, order_size) if it's a SELL
         fill_at_current_level = min(order.order_size, self.current_volume_left_at_price) if order.order_size > 0 \
