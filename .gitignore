@@ -1,5 +1,8 @@
 venv/
 *.pyc
+build/
+*.cpython-38-darwin.so
+*.c
 .DS_Store
 __pycache__/
 .idea/
