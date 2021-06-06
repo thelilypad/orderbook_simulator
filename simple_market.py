@@ -94,4 +94,4 @@ if __name__ == "__main__":
     traders = [LiquidatingRandomTrader(TRADER_ID, 300, -10000) for i in range(200)]
     market = SimpleMarket(300, 1000, traders, 500)
     market.run()
-    print(list(map(lambda x: str(x.open) + " " + str(x.close) + '\n', market.ohlcs)))
+    print(list(map(lambda x: (x.positions + '\n', traders)))
