@@ -1,17 +1,43 @@
 import numpy as np
+'''
+Mathematical helper functions for calculating the MCMC for the Bates model.
+rho = correlation between stock and variance random processes
+sigma_v = volatility of variance process (vol of vol)
+kappa = mean reversion speed coefficient
+theta = long run mean of variance
+mu = growth rate/expected return for asset price
+psi = rho * sigma_v
+omega = sigma_v^2(1 - rho^2)
+V_t =  
+'''
 
+DENOMINATOR_NUDGE = 1e-08
+
+'''
+Computes the posterior distribution of the drift estimator (mu).
+'''
 cpdef double mu_star(double psi, double omega, double kappa, double theta, double[:] V, double[:] Y, double[:] Z,
               double[:] B, double dt, double mu_prior, double sigma_sq_mu_prior):
-    numerator = sum((omega + psi ** 2) * (np.asarray(Y) + 0.5 * np.asarray(V[:-2]) * dt - \
-                np.asarray(Z) * np.asarray(B)) / (omega * np.asarray(V[:-2]))) - \
-                sum(psi * (np.asarray(V[1:-1]) - kappa * theta * dt - (1 - kappa * dt) * np.asarray(V[:-2])) /
-                (omega * np.asarray(V[:-2]))) + mu_prior / sigma_sq_mu_prior
-    denominator = dt * sum((omega + psi ** 2) / (omega * np.asarray(V[:-2]))) + 1 / sigma_sq_mu_prior
-    return numerator / (denominator + 1e-08)
+    V_t_minus_1 = np.asarray(V[:-2])
+    V_t = np.asarray(V[1:-1])
+    Y_t = np.asarray(Y)
+    jump_term = np.asarray(Z) * np.asarray(B)
+    omega_plus_psi_sq = omega + psi ** 2
+    omega_times_V_t_minus_1 = omega * V_t_minus_1
+
+    upper_sum = sum(omega_plus_psi_sq * (Y_t + 0.5 * V_t_minus_1 * dt - jump_term) / omega_times_V_t_minus_1)
+    lower_sum = sum(psi * (V_t - (kappa * theta * dt) - ((1 - kappa * dt) * V_t_minus_1)) /
+                    omega_times_V_t_minus_1)
+    numerator = upper_sum - lower_sum + (mu_prior / sigma_sq_mu_prior)
+    denominator = dt * sum(omega_plus_psi_sq/omega_times_V_t_minus_1 + 1 / sigma_sq_mu_prior)
+
+    return numerator / (denominator + DENOMINATOR_NUDGE)
 
 cpdef double sigma_sq_star(double psi, double omega, double[:] V, double dt, double sigma_prior):
-    denominator = dt * sum((omega + psi ** 2) / (omega * np.asarray(V[:-2]))) + 1 / (sigma_prior ** 2)
-    return 1 / (denominator + 1e-08)
+    omega_plus_psi_sq = omega + psi ** 2
+    V_t_minus_1 = np.asarray(V[:-2])
+    denominator = dt * sum(omega_plus_psi_sq / (omega * np.asarray(V[:-2]))) + sigma_prior ** -2
+    return (denominator + DENOMINATOR_NUDGE) ** -1
 
 cpdef double[:] get_eps_s(double[:] V, double[:] Y, double[:] Z, double[:] B, double mu, double dt):
     return (np.asarray(Y) - mu * dt + 0.5 * np.asarray(V[:-2]) * dt - np.asarray(Z) * np.asarray(B)) / \
